@@ -1,0 +1,51 @@
+service: kagoikeBot
+
+provider:
+  name: aws
+  architecture: arm64
+  runtime: python3.10
+  region: us-east-1
+  stage: prod
+  iam:
+    role:
+      statements:
+        # Lazy Listeners を利用するために必要
+        - Effect: Allow
+          Action:
+            - lambda:InvokeFunction
+            - lambda:InvokeAsync
+          Resource: "*"
+
+# エンドポイント一覧を設定
+functions:
+  bot:
+    handler: lambda_function.handler
+    events:
+      - httpApi:
+          path: /slack/events
+          method: post
+    environment:
+      OPENAI_API_KEY: ${env:OPENAI_API_KEY}
+      SLACK_BOT_TOKEN: ${env:SLACK_BOT_TOKEN}
+      SLACK_SIGNING_SECRET: ${env:SLACK_SIGNING_SECRET}
+
+# アップロードに含めたくないファイルは ! はじまりで列挙します
+package:
+  patterns:
+    - "!.venv/**"
+    - "!node_modules/**"
+    - "!.idea/**"
+    - "!docker-compose.yaml"
+    - "!Dockerfile"
+    - "!README.md"
+    - "!package-lock.json"
+    - "!package.json"
+
+# プラグインを使って依存ライブラリを zip 圧縮します
+plugins:
+  - serverless-python-requirements
+custom:
+  pythonRequirements:
+    zip: true
+    slim: true
+    dockerizePip: false
