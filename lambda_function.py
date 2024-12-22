@@ -21,7 +21,7 @@ app = App(
 )
 
 # Define the system prompt
-system_prompt = (
+system_prompt_kagoike = (
     "あなたは自由律俳句を読む人です。以下の自由律詩の表現の雰囲気と構文を基本として、"
     "与えられたテーマによる俳句を作ってください。\n"
     "* 構文のフォーマット（７句から構成）を守ってください\n"
@@ -44,14 +44,35 @@ system_prompt = (
     "「行ってきます」\n"
 )
 
+system_prompt_haiku = (
+"""あなたは日本語の俳句表現と朗読に長けた詩人兼朗読家です。
+    情景が目に浮かぶような言葉選びやリズムを意識し、落ち着いた口調で俳句を朗読することを得意とします。
+    ユーザーメッセージ（依頼内容の詳細）
+	1.	俳句の作成"
+	•	五・七・五の定型を守ってください。
+	•	季語（季節を感じさせる言葉）を一つ以上含めてください。
+	•	テーマはユーザーの指示にしたがってください
+	2.	補足解説
+	•	俳句の情景や作者の意図、また込められた心情を簡潔に解説してください。
+
+上記の要件に従って、以下の形式で回答してください：
+
+【俳句】  
+（朗読をイメージしたテキスト表現）
+
+【解説】  
+（俳句に込めた情景や作者の意図などの解説）
+"""
+)
+
 # Function to call OpenAI API and generate the response
-def call_openai(theme, user_name):
+def call_openai(theme, system_prompt):
     client  = OpenAI(
         api_key = os.getenv("OPENAI_API_KEY")
     )
 
     completion = openai.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"テーマ : {theme}"}
@@ -61,15 +82,13 @@ def call_openai(theme, user_name):
     )
 
     response_gpt = completion.choices[0].message.content
-    return f"テーマ : {theme}\n{response_gpt}\n<@{user_name}> かっこいい〜"
+    return response_gpt
 
 @app.middleware  # or app.use(log_request)
 def log_request(logger, body, next):
     logger.debug(body)
     return next()
 
-
-command = "/kagoike"
 
 def check_theme(body):
     theme = body.get("text")
@@ -81,30 +100,50 @@ def respond_to_slack_within_3_seconds(body, ack):
     ack()
 
 
-def process_request(respond, body):
+def process_request_kagoike(respond, body):
     if not check_theme(body):
         respond("テーマが与えられていません。 例) /kagoike 俳句のテーマ")
         return
     theme = body["text"]
     user_name = body["user_id"]
-    response = call_openai(theme, user_name)
+    response_gpt = call_openai(theme, system_prompt_kagoike)
+
+    response = f"テーマ : {theme}\n{response_gpt}\n<@{user_name}> かっこいい〜"
 
     respond(
         response_type = "in_channel", #指定しないとOnly Visible to You
         text = response
     )
 
-# ローカルでのみ実行される
-if __name__ == "__main__":
-    app.start(port=int(os.environ.get("PORT", 3000)))
+def process_request_haiku(respond, body):
+    if not check_theme(body):
+        respond("テーマが与えられていません。 例) /haiku 俳句のテーマ")
+        return
+    theme = body["text"]
+    user_name = body["user_id"]
+    response = call_openai(theme, system_prompt_haiku)
 
-app.command(command)(ack=respond_to_slack_within_3_seconds, lazy=[process_request])
+    respond(
+        response_type = "in_channel", #指定しないとOnly Visible to You
+        text = response
+    )
+
+
+app.command("/kagoike")(ack=respond_to_slack_within_3_seconds, lazy=[process_request_kagoike])
+app.command("/haiku")(ack=respond_to_slack_within_3_seconds, lazy=[process_request_haiku])
+
+
+
 
 SlackRequestHandler.clear_all_log_handlers()
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
 
-
 def handler(event, context):
     slack_handler = SlackRequestHandler(app=app)
     return slack_handler.handle(event, context)
-       
+
+# ローカルでのみ実行される
+# 基本的に最後においておいた方が無難
+# https://github.com/slackapi/bolt-python/issues/562
+if __name__ == "__main__":
+    app.start(port=int(os.environ.get("PORT", 3000)))
