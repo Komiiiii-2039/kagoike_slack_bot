@@ -48,4 +48,4 @@ custom:
   pythonRequirements:
     zip: true
     slim: true
-    dockerizePip: false
+    dockerizePip: true 
