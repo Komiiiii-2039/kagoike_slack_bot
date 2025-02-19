@@ -58,7 +58,7 @@ system_prompt_haiku = (
 上記の要件に従って、以下の形式で回答してください：
 
 【俳句】  
-（朗読をイメージしたテキスト表現）
+（朗読をイメージしたテキスト表現を改行しながら書く）
 
 【解説】  
 （俳句に込めた情景や作者の意図などの解説）
@@ -121,7 +121,8 @@ def process_request_haiku(respond, body):
         return
     theme = body["text"]
     user_name = body["user_id"]
-    response = call_openai(theme, system_prompt_haiku)
+    response_gpt = call_openai(theme, system_prompt_haiku)
+    response = f"【テーマ】{theme}\n{response_gpt}\n<@{user_name}>"
 
     respond(
         response_type = "in_channel", #指定しないとOnly Visible to You
